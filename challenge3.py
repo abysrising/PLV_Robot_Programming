@@ -1,5 +1,6 @@
 import rclpy  # ROS client library
 import subprocess
+import math
 from transforms3d.euler import quat2euler
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -28,7 +29,7 @@ class Tb3(Node):
                 self.odom_callback,  # function to run upon message arrival
                 qos_profile_sensor_data)  # allows packet loss
 
-        self.st = State.TO_THE_FIRST_WALL
+        self.st = State.STOP
         self.ang_vel_percent = 0
         self.lin_vel_percent = 0
     
@@ -53,12 +54,13 @@ class Tb3(Node):
         """
         position = msg.pose.pose.position
         orientation = msg.pose.pose.orientation
-        angles = quat2euler([orientation.w, orientation.x, orientation.y, orientation.z])
-        x = position.x
-        y = position.y
+        angles_radian = quat2euler([orientation.w, orientation.x, orientation.y, orientation.z])
+        angles_degree = [math.degrees(angle) for angle in angles_radian]
+        x = position.x 
+        y = position.y 
+        print(x, y)
+        print(angles_degree[2])
         
-        print(position)
-        #print(angles)
         if self.st == State.TO_THE_FIRST_WALL:
             self.vel(20,0)
             if y > 0.8:
@@ -73,7 +75,7 @@ class Tb3(Node):
                 self.st = State.STOP
 
         elif self.st == State.STOP:
-            self.vel(0,0)        
+            self.vel(0,5)        
         
 
         
