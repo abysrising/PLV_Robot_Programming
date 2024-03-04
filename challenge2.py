@@ -51,7 +51,7 @@ class Tb3(Node):
     def scan_callback(self, msg):
         print()
         if self.st == State.TO_THE_FIRST_WALL:
-            self.drive_smoove(0.25, msg.ranges[0], State.ROTATING)
+            self.drive_smoove(0.3, msg.ranges[0], State.ROTATING)
 
         elif self.st == State.ROTATING:
             self.rotate_smoove(0.195, msg.ranges[-90], State.TO_THE_SECOND_WALL)
