@@ -45,6 +45,7 @@ class Tb3(Node):
         self.start_adj = []
         self.start_adj_ang = 0
         self.set_adj = True
+        self.start_ori = "RIGHT"
 	
     def vel(self, lin_vel_percent, ang_vel_percent=0):
         MAX_LIN_VEL = 0.5
@@ -88,6 +89,15 @@ class Tb3(Node):
     def translate(self, point: tuple[float, float], translation: tuple[float, float]):     
     	return point[0] + translation[0], point[1] + translation[1]
 
+    def ori(self, degree):
+        if 89 <= degree <= 91:
+            return "UP"
+        elif 179 <= degree <= 181:
+            return "LEFT"
+        elif 269 <= degree <= 271:
+            return "DOWN"
+        elif 359 <= degree <= 360 or 0 <= degree <= 1:
+            return "RIGHT"
 
     def odom_callback(self, msg):
         position = msg.pose.pose.position
@@ -97,42 +107,39 @@ class Tb3(Node):
         x = position.x
         y = position.y
         pos = [x, y]
-        d1 = angles_degree[2] + 360 if angles_degree[2] < 0 else angles_degree[2]
-        
+        d1 = angles_degree[2] + 360 if angles_degree[2] < 0 else angles_degree[2] 
+        #print("position1: ", pos)
         if self.set_adj == True:
             self.start_adj = [-pos[0], -pos[1]]
             self.start_adj_ang = -d1
             self.set_adj = False
- 	    
+            self.start_ori = self.ori(0)
         x,y = self.rotate(pos, self.start_adj_ang)
-    
+        pos = [x, y]
+        #print("position2: ", pos)
         x,y = self.translate(pos, self.start_adj)
         pos = [x, y]
-        print(x, y)
+
+        d1 = d1 + self.start_adj_ang
+        print("position3: ", pos, "angle: ", d1)
+        #print(self.start_adj, self.start_adj_ang)
         
-        
-        if 89 <= d1 <= 91:
-            self.direction = "UP"
-        elif 179 <= d1 <= 181:
-            self.direction = "LEFT"
-        elif 269 <= d1 <= 271:
-            self.direction = "DOWN"
-        elif 359 <= d1 <= 360 or 0 <= d1 <= 1:
-            self.direction = "RIGHT"
+        self.direction = self.ori(d1)
+
 
 
         if self.st == State.TO_THE_FIRST_WALL:
-            self.drive_smoove("UP", pos, State.ROTATING)
+            self.drive_smoove(self.start_ori, pos, State.ROTATING)
 
         elif self.st == State.ROTATING:
-            self.rotate_smoove("RIGHT", d1, State.TO_THE_SECOND_WALL)
+            self.rotate_smoove("DOWN", d1, State.TO_THE_SECOND_WALL)
             
         elif self.st == State.TO_THE_SECOND_WALL:
-            self.drive_smoove("RIGHT", pos, State.STOP)
+            self.drive_smoove("DOWN", pos, State.STOP)
 
         elif self.st == State.STOP:
             self.vel(0, 0)
-	
+        
     def get_angular_direction(self, target_direction):
         if target_direction == "UP":
             return 90
