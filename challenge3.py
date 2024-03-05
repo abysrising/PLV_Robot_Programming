@@ -25,6 +25,7 @@ class Tb3(Node):
 
     
         self.clear_odom_topic()
+        
         self.st = State.TO_THE_FIRST_WALL
 
         self.acceleration_rate = 0.1
@@ -41,9 +42,13 @@ class Tb3(Node):
         self.start_position = 0
         self.start_direction = 0
 
+        self.start_adj = []
+        self.start_adj_ang = 0
+        self.set_adj = True
+	
     def vel(self, lin_vel_percent, ang_vel_percent=0):
-        MAX_LIN_VEL = 0.26
-        MAX_ANG_VEL = 1.82
+        MAX_LIN_VEL = 0.5
+        MAX_ANG_VEL = 3.64
 
         cmd_vel_msg = Twist()
         cmd_vel_msg.linear.x = MAX_LIN_VEL * lin_vel_percent / 100
@@ -73,6 +78,17 @@ class Tb3(Node):
             self.odom_callback,
             qos_profile_sensor_data)
 
+
+    def rotate(self, point: tuple[float, float], angle: float):     
+    	from math import cos, sin     
+    	return (         
+    		point[0] * cos(angle) - point[1] * sin(angle),         
+    		point[1] * cos(angle) + point[0] * sin(angle),     ) 
+    		
+    def translate(self, point: tuple[float, float], translation: tuple[float, float]):     
+    	return point[0] + translation[0], point[1] + translation[1]
+
+
     def odom_callback(self, msg):
         position = msg.pose.pose.position
         orientation = msg.pose.pose.orientation
@@ -83,8 +99,18 @@ class Tb3(Node):
         pos = [x, y]
         d1 = angles_degree[2] + 360 if angles_degree[2] < 0 else angles_degree[2]
         
+        if self.set_adj == True:
+            self.start_adj = [-pos[0], -pos[1]]
+            self.start_adj_ang = -d1
+            self.set_adj = False
+ 	    
+        x,y = self.rotate(pos, self.start_adj_ang)
+    
+        x,y = self.translate(pos, self.start_adj)
+        pos = [x, y]
+        print(x, y)
         
-
+        
         if 89 <= d1 <= 91:
             self.direction = "UP"
         elif 179 <= d1 <= 181:
@@ -99,14 +125,14 @@ class Tb3(Node):
             self.drive_smoove("UP", pos, State.ROTATING)
 
         elif self.st == State.ROTATING:
-            self.rotate_smoove("LEFT", d1, State.TO_THE_SECOND_WALL)
+            self.rotate_smoove("RIGHT", d1, State.TO_THE_SECOND_WALL)
             
         elif self.st == State.TO_THE_SECOND_WALL:
-            self.drive_smoove("LEFT", pos, State.STOP)
+            self.drive_smoove("RIGHT", pos, State.STOP)
 
         elif self.st == State.STOP:
             self.vel(0, 0)
-
+	
     def get_angular_direction(self, target_direction):
         if target_direction == "UP":
             return 90
@@ -124,6 +150,7 @@ class Tb3(Node):
             self.starting_angle = current_angle
         
         if self.direction == target_direction:
+            
             self.vel(0, 0)
             self.st = next_state
             self.starting_angle = 0
@@ -131,36 +158,26 @@ class Tb3(Node):
             self.ang_vel_percent = 2
     
         else:
-            current_angle_pc = (current_angle-self.starting_angle+0.1) / (self.target_angle-self.starting_angle)
             
-            if current_angle_pc > 0:
-                if current_angle_pc <= 0.5:
-                    self.ang_vel_percent = min(self.ang_vel_percent + self.acceleration_rate, 100)
-                elif current_angle_pc > 0.5:
-                    self.ang_vel_percent = max(self.ang_vel_percent - self.deceleration_rate, 5)
+            current_angle_pc = abs(current_angle-self.starting_angle) / abs(self.target_angle-self.starting_angle)
+            print(current_angle_pc)
+            if current_angle_pc <= 0.5:
+                self.ang_vel_percent = min(self.ang_vel_percent + self.acceleration_rate, 100)
+            elif current_angle_pc > 0.5:
+                self.ang_vel_percent = max(self.ang_vel_percent - self.deceleration_rate, 5)
+       
+            self.vel(0, self.ang_vel_percent)
 
-                self.vel(0, self.ang_vel_percent)
-
-            elif current_angle_pc < 0:
-                current_angle_pc = current_angle_pc *(-1)
-                if current_angle_pc <= 0.5:
-                    self.ang_vel_percent = min(self.ang_vel_percent + self.acceleration_rate, 100)
-                elif current_angle_pc > 0.5:
-                    self.ang_vel_percent = max(self.ang_vel_percent - self.deceleration_rate, 5)
-
-                self.vel(0, -self.ang_vel_percent)
-
-
-    def get_direction(self, target_direction, max_distance):
+    def get_direction(self, position, target_direction, driving_distance, tile_goal=0):
 
         if target_direction == "UP":
-            return 1-max_distance, 1
+            return position[1]+driving_distance+tile_goal, 1
         elif target_direction == "LEFT":
-            return 0+max_distance, 0
+            return position[0]-driving_distance+tile_goal, 0
         elif target_direction == "DOWN":
-            return 0+max_distance, 1 
+            return position[1]-driving_distance+tile_goal, 1 
         elif target_direction == "RIGHT":
-            return 1-max_distance, 0 
+            return position[0]+driving_distance+tile_goal, 0 
 
     def check_drive_goal(self, position, distance, target_direction):
 
@@ -173,11 +190,11 @@ class Tb3(Node):
         elif target_direction == "RIGHT":
             return position > distance
 
-    def drive_smoove(self, target_direction, position, next_state, max_distance = 0.2):
+    def drive_smoove(self, target_direction, position, next_state, driving_distance = 0.15):
 
 
         if self.target_distance == 0:
-            self.target_distance, self.start_direction = self.get_direction(target_direction, max_distance)
+            self.target_distance, self.start_direction = self.get_direction(position, target_direction, driving_distance)
             self.start_position = position[self.start_direction]
 
         current_position = position[self.start_direction]
@@ -201,6 +218,7 @@ class Tb3(Node):
             self.vel(self.lin_vel_percent, 0)  
         
 def main(args=None):
+    
     rclpy.init(args=args)
 
     tb3 = Tb3()
