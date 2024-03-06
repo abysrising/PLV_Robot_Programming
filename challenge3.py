@@ -46,8 +46,8 @@ class Tb3(Node):
         self.start_adj = []
         self.start_adj_ang = 0
         self.set_adj = True
-        self.start_ori = "RIGHT"
-
+     
+		
 
     def vel(self, lin_vel_percent, ang_vel_percent=0):
         MAX_LIN_VEL = 0.5
@@ -92,16 +92,6 @@ class Tb3(Node):
     	return point[0] + translation[0], point[1] + translation[1]
 
 
-    def ori(self, degree):
-        if 89 <= degree <= 91:
-            return "UP"
-        elif 179 <= degree <= 181:
-            return "LEFT"
-        elif 269 <= degree <= 271:
-            return "DOWN"
-        elif 359 <= degree <= 360 or 0 <= degree <= 1:
-            return "RIGHT"
-
     def odom_callback(self, msg):
         position = msg.pose.pose.position
         orientation = msg.pose.pose.orientation
@@ -110,87 +100,77 @@ class Tb3(Node):
         x = position.x
         y = position.y
         pos = [x, y]
-    
+        
         d1 = angles_degree[2] + 360 if angles_degree[2] < 0 else angles_degree[2] 
         
         if self.set_adj == True:
-            self.start_adj = [pos[0], pos[1]]
-            self.start_adj_ang = d1
+            self.start_adj = [-x, -y]
+            print(self.start_adj)
+            self.start_adj_ang = -angles_radian[2] 
+            print(self.start_adj_ang)
             self.set_adj = False
-            self.start_ori = self.ori(0)
-        x,y = self.rotate(pos, angles_radian[2])
+           
+        x,y = self.translate(pos, self.start_adj)
+        pos = [x, y]
+        x,y = self.rotate(pos, self.start_adj_ang)
         pos = [x, y]
        
         
-        x,y = self.translate(pos, self.start_adj)
-        pos = [x, y]
-
+        d1 = d1+math.degrees(self.start_adj_ang)
+        d1 = d1 + 360 if d1 < 0 else d1
         
         print(f"{pos=}\n{d1=}")
     
-        
-        self.direction = self.ori(d1)
- 	
-
-        target_angle = self.start_adj_ang + 90
-        if target_angle > 360:
-            target_angle = target_angle-360
+      
+ 
 
         if self.st == State.TO_THE_FIRST_WALL:
-            self.drive_smoove(pos, State.ROTATING, d1)
+            self.drive_smoove(pos, State.ROTATING)
         elif self.st == State.ROTATING:
-            self.rotate_smoove(target_angle, d1, State.TO_THE_SECOND_WALL)
+            self.rotate_smoove(180, d1, State.TO_THE_SECOND_WALL)
+            	
         elif self.st == State.TO_THE_SECOND_WALL:
-            # x,y = self.rotate(pos, math.radians(270))
-            pos = [x, y]
-            print(pos)
-            self.drive_smoove(pos, State.STOP, d1)
+            self.drive_smoove(pos, State.STOP)
 
         elif self.st == State.STOP:
             self.vel(0, 0)
         
 
-    def rotate_smoove(self,target_angle, current_angle, next_state):
+    def rotate_smoove(self, target_angle, current_angle, next_state):
         print("target angle: ", target_angle)
-        if current_angle > target_angle:
-            
+        error = math.fmod(target_angle - current_angle, 360)
+        if math.isclose(error, 0, abs_tol=1):
+            self.start_adj_ang += math.radians(-target_angle)
             self.vel(0, 0)
             self.st = next_state
             self.target_angle = 0
             self.ang_vel_percent = 2
     
         else:
-          
-       
-            self.vel(0, -15)
+            if error > 180:
+            	rot_dir = 1
+            else:
+                rot_dir = -1
+            self.vel(0, rot_dir * 15)
 
 
-    def check_drive_goal(self, position, distance, d1):
+    def check_drive_goal(self, position, distance):
         print(position, distance)
-        if d1 > 180 and d1 < 360:
-            if position > distance:
-                
-                return True
-        else:
-            if position < distance:
-                
-                return True
+        if position > distance:
+            return True
+        
+   
 
-
-    def drive_smoove(self, position, next_state, d1, driving_distance = 0.15):
+    def drive_smoove(self, position, next_state, driving_distance = 0.15):
         if self.target_distance == 0:
             print(position[0])
-            if d1 > 180 and d1 < 360:
-            	self.target_distance = position[0]+driving_distance
-            else:
-                self.target_distance = position[0]-driving_distance
-            print(self.target_distance)
-           
+            self.target_distance = position[0]+driving_distance
+
             
         current_position = position[0]
         
         
-        if self.check_drive_goal(current_position, self.target_distance, d1) == True:
+        if self.check_drive_goal(current_position, self.target_distance) == True:
             
             self.vel(0, 0)
             self.st = next_state
@@ -213,6 +193,21 @@ class Tb3(Node):
         
 def main(args=None):
     rclpy.init(args=args)
+
+    tb3 = Tb3()
+    tb3.start_odom_subscription()
+    print("Waiting for messages...")
+
+    def stop_robot(sig, frame):
+        tb3.vel(0, 0)
+        tb3.destroy_node()
+        rclpy.shutdown()
+
+    signal.signal(signal.SIGINT, stop_robot)  # Stop on SIGINT
+    rclpy.spin(tb3)
+
+
+if __name__ == "__main__":
 
     tb3 = Tb3()
     tb3.start_odom_subscription()
