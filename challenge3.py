@@ -7,6 +7,7 @@ from rclpy.qos import qos_profile_sensor_data
 from enum import Enum, auto
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
+from math import fmod, pi
 
 class State(Enum):
     TO_THE_FIRST_WALL = auto()
@@ -46,7 +47,8 @@ class Tb3(Node):
         self.start_adj_ang = 0
         self.set_adj = True
         self.start_ori = "RIGHT"
-	
+
+
     def vel(self, lin_vel_percent, ang_vel_percent=0):
         MAX_LIN_VEL = 0.5
         MAX_ANG_VEL = 3.64
@@ -89,6 +91,7 @@ class Tb3(Node):
     def translate(self, point: tuple[float, float], translation: tuple[float, float]):     
     	return point[0] + translation[0], point[1] + translation[1]
 
+
     def ori(self, degree):
         if 89 <= degree <= 91:
             return "UP"
@@ -110,18 +113,20 @@ class Tb3(Node):
         d1 = angles_degree[2] + 360 if angles_degree[2] < 0 else angles_degree[2] 
         #print("position1: ", pos)
         if self.set_adj == True:
-            self.start_adj = [-pos[0], -pos[1]]
-            self.start_adj_ang = -d1
+            self.start_adj = [pos[0], pos[1]]
+            self.start_adj_ang = d1
             self.set_adj = False
             self.start_ori = self.ori(0)
         x,y = self.rotate(pos, self.start_adj_ang)
         pos = [x, y]
         #print("position2: ", pos)
         x,y = self.translate(pos, self.start_adj)
-        pos = [x, y]
+        pos = [-x, y]
 
-        d1 = d1 + self.start_adj_ang
-        print("position3: ", pos, "angle: ", d1)
+        d1 = d1 - self.start_adj_ang
+        d1 = d1 + 360 if d1 < 0 else d1
+        #
+        print(f"{pos=}\n{d1=}")
         #print(self.start_adj, self.start_adj_ang)
         
         self.direction = self.ori(d1)
@@ -130,11 +135,12 @@ class Tb3(Node):
 
         if self.st == State.TO_THE_FIRST_WALL:
             self.drive_smoove(self.start_ori, pos, State.ROTATING)
-
         elif self.st == State.ROTATING:
             self.rotate_smoove("DOWN", d1, State.TO_THE_SECOND_WALL)
-            
         elif self.st == State.TO_THE_SECOND_WALL:
+            x,y = self.rotate(pos, 270)
+            pos = [x, y]
+            print(pos)
             self.drive_smoove("DOWN", pos, State.STOP)
 
         elif self.st == State.STOP:
@@ -166,23 +172,23 @@ class Tb3(Node):
     
         else:
             
-            current_angle_pc = abs(current_angle-self.starting_angle) / abs(self.target_angle-self.starting_angle)
-            print(current_angle_pc)
-            if current_angle_pc <= 0.5:
-                self.ang_vel_percent = min(self.ang_vel_percent + self.acceleration_rate, 100)
-            elif current_angle_pc > 0.5:
-                self.ang_vel_percent = max(self.ang_vel_percent - self.deceleration_rate, 5)
+            #current_angle_pc = abs(current_angle-self.starting_angle) / abs(self.target_angle-self.starting_angle)
+            #print(current_angle_pc)
+            #if current_angle_pc <= 0.5:
+            #    self.ang_vel_percent = min(self.ang_vel_percent + self.acceleration_rate, 100)
+            #elif current_angle_pc > 0.5:
+            #    self.ang_vel_percent = max(self.ang_vel_percent - self.deceleration_rate, 5)
        
-            self.vel(0, self.ang_vel_percent)
+            self.vel(0, -15)
 
     def get_direction(self, position, target_direction, driving_distance, tile_goal=0):
 
         if target_direction == "UP":
-            return position[1]+driving_distance+tile_goal, 1
+            return position[0]+driving_distance+tile_goal, 0
         elif target_direction == "LEFT":
-            return position[0]-driving_distance+tile_goal, 0
+            return position[0]+driving_distance+tile_goal, 0
         elif target_direction == "DOWN":
-            return position[1]-driving_distance+tile_goal, 1 
+            return position[0]+driving_distance+tile_goal, 0 
         elif target_direction == "RIGHT":
             return position[0]+driving_distance+tile_goal, 0 
 
@@ -191,17 +197,18 @@ class Tb3(Node):
         if target_direction == "UP":
             return position > distance
         elif target_direction == "LEFT":
-            return position < distance
+            return position > distance
         elif target_direction == "DOWN":
-            return position < distance
+            return position > distance
         elif target_direction == "RIGHT":
             return position > distance
 
     def drive_smoove(self, target_direction, position, next_state, driving_distance = 0.15):
-
-
         if self.target_distance == 0:
             self.target_distance, self.start_direction = self.get_direction(position, target_direction, driving_distance)
+            if self.target_distance < 0:
+                self.target_distance = 1 + self.target_distance
+            print(self.target_distance)
             self.start_position = position[self.start_direction]
 
         current_position = position[self.start_direction]
