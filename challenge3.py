@@ -105,14 +105,16 @@ class Tb3(Node):
         
         if self.set_adj == True:
             self.start_adj = [-x, -y]
-            print(self.start_adj)
+            #print(self.start_adj)
             self.start_adj_ang = -angles_radian[2] 
-            print(self.start_adj_ang)
+            #print(self.start_adj_ang)
             self.set_adj = False
            
         x,y = self.translate(pos, self.start_adj)
         pos = [x, y]
         x,y = self.rotate(pos, self.start_adj_ang)
+        x+=0.5
+        y+=0.5
         pos = [x, y]
        
         
@@ -125,21 +127,22 @@ class Tb3(Node):
  
 
         if self.st == State.TO_THE_FIRST_WALL:
-            self.drive_smoove(pos, State.ROTATING)
+            self.drive_smoove(pos, State.ROTATING, 0.25)
         elif self.st == State.ROTATING:
-            self.rotate_smoove(180, d1, State.TO_THE_SECOND_WALL)
+            self.rotate_smoove(-90, d1, State.TO_THE_SECOND_WALL)
             	
         elif self.st == State.TO_THE_SECOND_WALL:
-            self.drive_smoove(pos, State.STOP)
+            self.drive_smoove(pos, State.STOP, 1)
 
         elif self.st == State.STOP:
             self.vel(0, 0)
         
 
     def rotate_smoove(self, target_angle, current_angle, next_state):
-        print("target angle: ", target_angle)
+        #print("target angle: ", target_angle)
         error = math.fmod(target_angle - current_angle, 360)
         if math.isclose(error, 0, abs_tol=1):
+            
             self.start_adj_ang += math.radians(-target_angle)
             self.vel(0, 0)
             self.st = next_state
@@ -208,19 +211,6 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-
-    tb3 = Tb3()
-    tb3.start_odom_subscription()
-    print("Waiting for messages...")
-
-    def stop_robot(sig, frame):
-        tb3.vel(0, 0)
-        tb3.destroy_node()
-        rclpy.shutdown()
-
-    signal.signal(signal.SIGINT, stop_robot)  # Stop on SIGINT
-    rclpy.spin(tb3)
-
-
-if __name__ == "__main__":
     main()
+
+
